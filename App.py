@@ -8,49 +8,46 @@ from itertools import cycle
 def load_and_preprocess_data():
     df = pd.read_excel('Iniciativas em Construção Sustentável e Circular (Responses).xlsx').drop(['Timestamp', 'Nome', 'Email'], axis=1)
 
-    # Store location column name for reference
-    location_col = 'Localização NUT III (pode ser selecionada mais do que uma)'
+    # Store original column names
     entity_col = 'Nome da Entidade'
     stakeholder_col = 'Grupo de stakeholders que pertencem à organização (pode ser selecionada mais do que uma)'
-    
-    # Define question columns (excluding location)
-    multi_answer_cols = [
-                     'Se tivesse 60 000€ para o desenvolvimento de um novo serviço ou produto relacionado com a reutilização de materiais (excluindo investimentos), como usaria este valor? (Escolha até 3 opções)',
-                     'Que barreiras existentes identifica na implementação e no desenvolvimento de um novo produto ou serviço para a reutilização de materiais?  (Escolha até 3 opções)',
-                     'Que estratégias de circularidade / reutilização já estão implementadas na sua entidade?  (É possível selecionar mais do que uma opção).',
-                     'Que ações internacionais considera necessárias para o desenvolvimento de práticas mais circulares / reutilização? (É possível selecionar mais do que uma opção).',
-                     'De forma a desenvolver práticas de circularidade / reutilização na sua entidade, em quais das seguintes opções estaria interessado? (É possível selecionar mais do que uma opção).',
-                     'No âmbito do B4PIC, quais das seguintes atividades considera ser mais importante para a sua organização? (É possível selecionar mais do que uma opção).',
-                     'Em que tipo de projetos gostaria de participar? (É possível selecionar mais do que uma opção).',
-                     'Que indicadores de sustentabilidade poderiam apoiar a sua atividade? (É possível selecionar mais do que uma opção).',
-                     ]
+    location_col = 'Localização NUT III (pode ser selecionada mais do que uma)'
 
-    # Split all multi-answer columns
-    all_cols = multi_answer_cols + [location_col, stakeholder_col]
-    for col in all_cols:
+    multi_answer_cols = [
+        'Se tivesse 60 000€ para o desenvolvimento de um novo serviço ou produto relacionado com a reutilização de materiais (excluindo investimentos), como usaria este valor? (Escolha até 3 opções)',
+        'Que barreiras existentes identifica na implementação e no desenvolvimento de um novo produto ou serviço para a reutilização de materiais?  (Escolha até 3 opções)',
+        'Que estratégias de circularidade / reutilização já estão implementadas na sua entidade?  (É possível selecionar mais do que uma opção).',
+        'Que ações internacionais considera necessárias para o desenvolvimento de práticas mais circulares / reutilização? (É possível selecionar mais do que uma opção).',
+        'De forma a desenvolver práticas de circularidade / reutilização na sua entidade, em quais das seguintes opções estaria interessado? (É possível selecionar mais do que uma opção).',
+        'No âmbito do B4PIC, quais das seguintes atividades considera ser mais importante para a sua organização? (É possível selecionar mais do que uma opção).',
+        'Em que tipo de projetos gostaria de participar? (É possível selecionar mais do que uma opção).',
+        'Que indicadores de sustentabilidade poderiam apoiar a sua atividade? (É possível selecionar mais do que uma opção).',
+    ]
+
+    # Clean and split responses into lists for all relevant columns
+    cols_to_split = [location_col, stakeholder_col] + multi_answer_cols
+    for col in cols_to_split:
         df[col] = df[col].fillna('').str.split(', ')
 
     tidy_dfs = []
     
     # Process each question column
     for col in multi_answer_cols:
-        # Create temporary dataframe
-        temp_df = df[[entity_col, stakeholder_col, location_col, col]].copy()
+        # Create temporary dataframe with relevant columns
+        temp_df = df[[entity_col, stakeholder_col, col]].copy()
         
-        # Explode all multiple-choice columns
+        # Explode both stakeholders and the current question's answers
         temp_df = temp_df.explode(stakeholder_col)
-        temp_df = temp_df.explode(location_col)
         temp_df = temp_df.explode(col)
         
         # Rename columns for consistency
         temp_df = temp_df.rename(columns={
             col: 'Answer',
             stakeholder_col: 'Stakeholder',
-            location_col: 'Location',
             entity_col: 'Entity'
         })
-        
         temp_df['Question'] = col
+        
         tidy_dfs.append(temp_df)
 
     # Combine all DataFrames
@@ -61,28 +58,49 @@ def load_and_preprocess_data():
     tidy_df = tidy_df.dropna(subset=['Answer'])
     tidy_df = tidy_df[tidy_df['Answer'] != '']
     
-    return tidy_df
+    # Handle location data separately
+    location_df = df[[entity_col, stakeholder_col, location_col]].copy()
+    location_df = location_df.explode(stakeholder_col)
+    location_df = location_df.explode(location_col)
+    location_df = location_df.rename(columns={
+        stakeholder_col: 'Stakeholder',
+        location_col: 'Location',
+        entity_col: 'Entity'
+    })
+    
+    # Clean location data
+    location_df['Location'] = location_df['Location'].fillna('')
+    location_df = location_df[location_df['Location'] != '']
+    
+    return tidy_df, location_df
 
 def display_group_table(data, group_col):
     """Display summary table for the selected grouping"""
-    # First create summary without reset_index
-    summary = data.groupby(group_col).agg({
-        'Answer': 'count',
-        'Entity': 'nunique'
-    })
+    # Create a copy of the group column with a temporary name to avoid conflicts
+    temp_col = f'temp_{group_col}'
+    data = data.copy()
+    data[temp_col] = data[group_col]
     
-    # Rename columns before reset_index
-    summary.columns = ['Total Responses', 'Unique Entities']
+    # Use the temporary column for grouping
+    summary = (data.groupby(temp_col, observed=True)
+               .agg({
+                   'Answer': 'count',
+                   'Entity': 'nunique'
+               })
+               .reset_index()
+               .rename(columns={
+                   temp_col: group_col,
+                   'Answer': 'Total Responses',
+                   'Entity': 'Unique Entities'
+               }))
     
-    # Now reset index safely
-    summary = summary.reset_index()
     return summary
 
 def interactive_analysis():
     st.title("Interactive Circular Economy Initiatives Analysis")
     
     # Load data
-    tidy_df = load_and_preprocess_data()
+    tidy_df, location_df = load_and_preprocess_data()
     
     # Sidebar Controls
     st.sidebar.header("Chart Configuration")
@@ -90,7 +108,7 @@ def interactive_analysis():
     questions = sorted(tidy_df['Question'].unique())
     selected_question = st.sidebar.selectbox("Select Question", questions)
     
-    group_options = ['Location', 'Entity', 'Stakeholders', 'Total']
+    group_options = ['Location', 'Entity', 'Stakeholder', 'Total']
     selected_group = st.sidebar.selectbox("Group By", group_options)
     
     chart_types = ['Stacked Bar', 'Grouped Bar', 'Pie Chart', 'Treemap', 'Horizontal Bar', 'Sankey']
@@ -108,34 +126,43 @@ def interactive_analysis():
     )
     
     # Handle grouping
-    if selected_group == 'Stakeholders':
+    if selected_group == 'Stakeholder':
         group_col = 'Stakeholder'
-        merged_df = question_df
     elif selected_group == 'Location':
+        # Merge with location data for this case
+        question_df = pd.merge(
+            question_df,
+            location_df[['Entity', 'Location']].drop_duplicates(),
+            on='Entity',
+            how='left'
+        )
         group_col = 'Location'
-        merged_df = question_df
     elif selected_group == 'Entity':
         group_col = 'Entity'
-        merged_df = question_df
     else:  # Total
-        merged_df = question_df.copy()
-        merged_df['Total'] = 'Total'
+        question_df['Total'] = 'Total'
         group_col = 'Total'
 
-    # Calculate metrics
-    count_data = merged_df.groupby([group_col, 'Answer']).size().reset_index(name='Count')
-    count_data['Percentage'] = count_data.groupby(group_col)['Count'].apply(
-        lambda x: x / x.sum() * 100
-    ).reset_index(drop=True)
+    # Calculate metrics and sort by values
+    count_data = question_df.groupby([group_col, 'Answer']).size().reset_index(name='Count')
+    
+    # Sort answers by total count
+    answer_totals = count_data.groupby('Answer')['Count'].sum().sort_values(ascending=False)
+    answer_order = list(answer_totals.index)
+    
+    # Calculate percentages for each group
+    count_data['Percentage'] = count_data.groupby(group_col)['Count'].transform(
+        lambda x: (x / x.sum()) * 100
+    )
     
     # Display group summary
     st.header("Group Summary")
     if selected_group != 'Total':
-        summary_table = display_group_table(merged_df, group_col)
+        summary_table = display_group_table(question_df, group_col)
         st.dataframe(summary_table)
     else:
-        total_responses = len(merged_df)
-        unique_entities = merged_df['Entity'].nunique()
+        total_responses = len(question_df)
+        unique_entities = question_df['Entity'].nunique()
         col1, col2 = st.columns(2)
         col1.metric("Total Responses", total_responses)
         col2.metric("Unique Entities", unique_entities)
@@ -150,126 +177,165 @@ def interactive_analysis():
     st.header("Interactive Visualization")
     
     # Create plot
-    if selected_chart == 'Pie Chart':
+    # Create plot
+    if selected_chart == 'Sankey':
+        # Create node labels and indices
+        group_labels = sorted(count_data[group_col].unique())
+        answer_labels = answer_order
+        
+        # Ensure all labels are strings and handle None/NaN values
+        group_labels = [str(label) if label is not None else 'Unknown' for label in group_labels]
+        answer_labels = [str(label) if label is not None else 'Unknown' for label in answer_labels]
+        
+        all_nodes = group_labels + answer_labels
+        node_indices = {node: idx for idx, node in enumerate(all_nodes)}
+        
+        # Create links ensuring proper string conversion
+        source = []
+        target = []
+        value = []
+        
+        for _, row in count_data.iterrows():
+            group = str(row[group_col]) if row[group_col] is not None else 'Unknown'
+            answer = str(row['Answer']) if row['Answer'] is not None else 'Unknown'
+            
+            if group in node_indices and answer in node_indices:
+                source.append(node_indices[group])
+                target.append(node_indices[answer])
+                value.append(row['Count'])
+        
+        # Create color list ensuring we have enough colors
+        num_nodes = len(all_nodes)
+        colors = palette_mapping[selected_palette]
+        # Repeat colors if necessary
+        while len(colors) < num_nodes:
+            colors = colors + colors
+        colors = colors[:num_nodes]
+        
+        # Create Sankey diagram with improved layout
+        fig = go.Figure(data=[go.Sankey(
+            node=dict(
+                pad=20,
+                thickness=20,
+                line=dict(color="black", width=0.5),
+                label=all_nodes,
+                color=colors
+            ),
+            link=dict(
+                source=source,
+                target=target,
+                value=value
+            )
+        )])
+        
+        # Update layout with better spacing and size
+        fig.update_layout(
+            title=dict(
+                text=f"{selected_question[:50]}...",
+                x=0.5,
+                xanchor='center'
+            ),
+            height=800,
+            font=dict(size=12),
+            margin=dict(t=100, r=250, b=50, l=250)  # Increased margins for better label visibility
+        )
+    
+    elif selected_chart == 'Pie Chart':
         fig = px.pie(
             count_data,
             names='Answer',
             values='Count',
             color='Answer',
             color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
+        
+        # Update traces with correct percentage display
+        fig.update_traces(
+            textposition='inside',
+            textinfo='percent',
+            texttemplate='%{percent}%',  # Remove .1f to show whole percentages
+            textfont=dict(size=12)
+        )
+        
+        fig.update_layout(
+            showlegend=True,
+            legend=dict(
+                orientation="v",
+                yanchor="middle",
+                y=0.5,
+                xanchor="left",
+                x=1.2,
+                font=dict(size=10)
+            ),
+            height=700,
+            width=900,
+            margin=dict(t=100, b=50, r=200)
+        )
+    
+    elif selected_chart == 'Stacked Bar':
+        fig = px.bar(
+            count_data,
+            x=group_col,
+            y='Percentage',
+            color='Answer',
+            text='Percentage',
+            barmode='stack',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
+        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+    
+    elif selected_chart == 'Grouped Bar':
+        fig = px.bar(
+            count_data,
+            x=group_col,
+            y='Percentage',
+            color='Answer',
+            text='Percentage',
+            barmode='group',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
+        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+    
+    elif selected_chart == 'Treemap':
+        fig = px.treemap(
+            count_data,
+            path=[group_col, 'Answer'],
+            values='Count',
+            color='Answer',
+            color_discrete_sequence=palette_mapping[selected_palette],
             title=f"{selected_question[:50]}..."
         )
-        # Remove the automatic percentage text
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-    elif selected_chart == 'Sankey':
-        # Prepare data for Sankey diagram
-        source = []
-        target = []
-        value = []
-        
-        # Create node labels
-        unique_groups = merged_df[group_col].unique()
-        unique_answers = merged_df['Answer'].unique()
-        
-        # Create mapping for node indices
-        group_to_idx = {group: idx for idx, group in enumerate(unique_groups)}
-        answer_to_idx = {answer: idx + len(unique_groups) for idx, answer in enumerate(unique_answers)}
-        
-        # Create links data
-        for _, row in count_data.iterrows():
-            source.append(group_to_idx[row[group_col]])
-            target.append(answer_to_idx[row['Answer']])
-            value.append(row['Count'])
-        
-        # Create node labels
-        node_labels = list(unique_groups) + list(unique_answers)
-        
-        # Get colors from the selected palette
-        node_colors = px.colors.sample_colorscale(palette_mapping[selected_palette], 
-                                                 len(node_labels))
-        
-        # Create Sankey figure
-        fig = go.Figure(data=[go.Sankey(
-            node = dict(
-                pad = 15,
-                thickness = 20,
-                line = dict(color = "black", width = 0.5),
-                label = node_labels,
-                color = node_colors,
-                hoverlabel = dict(bgcolor = 'white'),
-                hovertemplate = '%{label}<br>' +
-                              'Total: %{value}<extra></extra>'
-            ),
-            link = dict(
-                source = source,
-                target = target,
-                value = value,
-                hoverlabel = dict(bgcolor = 'white'),
-                hovertemplate = 'From: %{source.label}<br>' +
-                              'To: %{target.label}<br>' +
-                              'Count: %{value}<extra></extra>'
-            ),
-            arrangement = 'snap'
-        )])
-    else:
-        if selected_chart == 'Stacked Bar':
-            fig = px.bar(
-                count_data,
-                x=group_col,
-                y='Percentage',
-                color='Answer',
-                text='Percentage',
-                barmode='stack',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}..."
-            )
-        elif selected_chart == 'Grouped Bar':
-            fig = px.bar(
-                count_data,
-                x=group_col,
-                y='Percentage',
-                color='Answer',
-                text='Percentage',
-                barmode='group',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}..."
-            )
-        elif selected_chart == 'Treemap':
-            fig = px.treemap(
-                count_data,
-                path=[group_col, 'Answer'],
-                values='Count',
-                color='Answer',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}..."
-            )
-        elif selected_chart == 'Horizontal Bar':
-            fig = px.bar(
-                count_data,
-                y=group_col,
-                x='Percentage',
-                color='Answer',
-                orientation='h',
-                text='Percentage',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}..."
-            )
-
-    # Update text format for regular charts (excluding Treemap and Sankey)
-    if selected_chart not in ['Treemap', 'Sankey']:
+    
+    elif selected_chart == 'Horizontal Bar':
+        fig = px.bar(
+            count_data,
+            y=group_col,
+            x='Percentage',
+            color='Answer',
+            orientation='h',
+            text='Percentage',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
         fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
 
-    # Common layout updates
-    fig.update_layout(
-        height=600,
-        xaxis_title=selected_group if selected_chart != 'Horizontal Bar' else 'Percentage (%)',
-        yaxis_title='Percentage (%)' if selected_chart != 'Horizontal Bar' else selected_group,
-        legend_title='Answers',
-        hovermode='closest',
-        font=dict(size=12),
-        plot_bgcolor='white',
-        paper_bgcolor='white'
-    )
+    # Common layout updates (except for pie chart and sankey which have their own)
+    if selected_chart not in ['Pie Chart', 'Sankey']:
+        fig.update_layout(
+            height=600,
+            xaxis_title=selected_group if selected_chart != 'Horizontal Bar' else 'Percentage (%)',
+            yaxis_title='Percentage (%)' if selected_chart != 'Horizontal Bar' else selected_group,
+            legend_title='Answers',
+            hovermode='closest',
+            font=dict(size=12)
+        )
     
     st.plotly_chart(fig, use_container_width=True)
 
