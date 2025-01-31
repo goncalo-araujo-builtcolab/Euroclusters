@@ -76,24 +76,16 @@ def load_and_preprocess_data():
 
 def display_group_table(data, group_col):
     """Display summary table for the selected grouping"""
-    # Create a copy of the group column with a temporary name to avoid conflicts
-    temp_col = f'temp_{group_col}'
-    data = data.copy()
-    data[temp_col] = data[group_col]
-    
-    # Use the temporary column for grouping
-    summary = (data.groupby(temp_col, observed=True)
+    # Ensure we're not duplicating the group column in the index
+    summary = (data.groupby(group_col, observed=True)
                .agg({
                    'Answer': 'count',
                    'Entity': 'nunique'
                })
-               .reset_index()
-               .rename(columns={
-                   temp_col: group_col,
-                   'Answer': 'Total Responses',
-                   'Entity': 'Unique Entities'
-               }))
+               .reset_index())
     
+    # Rename columns after reset_index to avoid duplicates
+    summary.columns = [f'{group_col}', 'Total Responses', 'Unique Entities']
     return summary
 
 def interactive_analysis():
@@ -177,49 +169,27 @@ def interactive_analysis():
     st.header("Interactive Visualization")
     
     # Create plot
-    # Create plot
     if selected_chart == 'Sankey':
         # Create node labels and indices
         group_labels = sorted(count_data[group_col].unique())
         answer_labels = answer_order
         
-        # Ensure all labels are strings and handle None/NaN values
-        group_labels = [str(label) if label is not None else 'Unknown' for label in group_labels]
-        answer_labels = [str(label) if label is not None else 'Unknown' for label in answer_labels]
-        
-        all_nodes = group_labels + answer_labels
+        all_nodes = list(group_labels) + list(answer_labels)
         node_indices = {node: idx for idx, node in enumerate(all_nodes)}
         
-        # Create links ensuring proper string conversion
-        source = []
-        target = []
-        value = []
+        # Create links
+        source = [node_indices[row[group_col]] for _, row in count_data.iterrows()]
+        target = [node_indices[row['Answer']] + len(group_labels) for _, row in count_data.iterrows()]
+        value = count_data['Count'].tolist()
         
-        for _, row in count_data.iterrows():
-            group = str(row[group_col]) if row[group_col] is not None else 'Unknown'
-            answer = str(row['Answer']) if row['Answer'] is not None else 'Unknown'
-            
-            if group in node_indices and answer in node_indices:
-                source.append(node_indices[group])
-                target.append(node_indices[answer])
-                value.append(row['Count'])
-        
-        # Create color list ensuring we have enough colors
-        num_nodes = len(all_nodes)
-        colors = palette_mapping[selected_palette]
-        # Repeat colors if necessary
-        while len(colors) < num_nodes:
-            colors = colors + colors
-        colors = colors[:num_nodes]
-        
-        # Create Sankey diagram with improved layout
+        # Create Sankey diagram
         fig = go.Figure(data=[go.Sankey(
             node=dict(
-                pad=20,
+                pad=15,
                 thickness=20,
                 line=dict(color="black", width=0.5),
                 label=all_nodes,
-                color=colors
+                color=palette_mapping[selected_palette][:len(all_nodes)]
             ),
             link=dict(
                 source=source,
@@ -228,16 +198,10 @@ def interactive_analysis():
             )
         )])
         
-        # Update layout with better spacing and size
         fig.update_layout(
-            title=dict(
-                text=f"{selected_question[:50]}...",
-                x=0.5,
-                xanchor='center'
-            ),
+            title=f"{selected_question[:50]}...",
             height=800,
-            font=dict(size=12),
-            margin=dict(t=100, r=250, b=50, l=250)  # Increased margins for better label visibility
+            margin=dict(t=100, r=200)
         )
     
     elif selected_chart == 'Pie Chart':
@@ -254,8 +218,8 @@ def interactive_analysis():
         # Update traces with correct percentage display
         fig.update_traces(
             textposition='inside',
-            #textinfo='percent',
-            #texttemplate='%{percent}%',  # Remove .1f to show whole percentages
+            textinfo='percent',
+            texttemplate='%{percent}%',  # Remove .1f to show whole percentages
             textfont=dict(size=12)
         )
         
@@ -303,56 +267,14 @@ def interactive_analysis():
         fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
     
     elif selected_chart == 'Treemap':
-        try:
-            # Ensure data is properly formatted for treemap
-            if count_data.empty:
-                # Create an empty figure if no data
-                fig = go.Figure()
-                fig.update_layout(
-                    title="No data available",
-                    annotations=[{
-                        'text': 'No data available for treemap',
-                        'xref': 'paper',
-                        'yref': 'paper',
-                        'showarrow': False,
-                        'font': {'size': 20}
-                    }]
-                )
-            else:
-                # Create treemap with error handling
-                fig = px.treemap(
-                    count_data,
-                    path=[group_col, 'Answer'],
-                    values='Count',
-                    color='Answer',
-                    color_discrete_sequence=palette_mapping[selected_palette],
-                    title=f"{selected_question[:50]}..."
-                )
-                
-                # Update treemap layout
-                fig.update_traces(
-                    textinfo="label+value",
-                    hovertemplate='<b>%{label}</b><br>Count: %{value}<extra></extra>'
-                )
-                
-                fig.update_layout(
-                    margin=dict(t=50, l=25, r=25, b=25)
-                )
-        
-        except Exception as e:
-            st.error(f"Error creating treemap: {str(e)}")
-            # Create a fallback figure
-            fig = go.Figure()
-            fig.update_layout(
-                title="Error creating treemap",
-                annotations=[{
-                    'text': 'Unable to create treemap with current data',
-                    'xref': 'paper',
-                    'yref': 'paper',
-                    'showarrow': False,
-                    'font': {'size': 20}
-                }]
-            )
+        fig = px.treemap(
+            count_data,
+            path=[group_col, 'Answer'],
+            values='Count',
+            color='Answer',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}..."
+        )
     
     elif selected_chart == 'Horizontal Bar':
         fig = px.bar(
