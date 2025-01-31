@@ -245,25 +245,22 @@ def interactive_analysis():
         total = count_data['Count'].sum()
         count_data['Percentage'] = (count_data['Count'] / total * 100).round(1)
         
-        fig = px.pie(
-            count_data,
-            names='Answer',
-            values='Count',
-            color='Answer',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}...",
-            category_orders={'Answer': answer_order}
-        )
-        
-        # Update traces specifically for pie chart
-        fig.update_traces(
+        # Create the pie chart with explicit text settings
+        fig = go.Figure(data=[go.Pie(
+            labels=count_data['Answer'],
+            values=count_data['Count'],
+            text=count_data['Percentage'].apply(lambda x: f'{x:.1f}%'),  # Explicit text formatting
             textposition='inside',
-            textinfo='percent+label',
             hovertemplate='%{label}<br>%{percent:.1f}%<extra></extra>',
-            textfont=dict(size=12)
-        )
+            marker=dict(
+                colors=palette_mapping[selected_palette][:len(count_data)],
+                #line=dict(color='white', width=2)
+            ),
+            textinfo='text+label'
+        )])
         
         fig.update_layout(
+            title=f"{selected_question[:50]}...",
             showlegend=True,
             legend=dict(
                 orientation="v",
