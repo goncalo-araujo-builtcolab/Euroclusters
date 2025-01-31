@@ -255,7 +255,7 @@ def interactive_analysis():
             category_orders={'Answer': answer_order}
         )
         
-        # Update traces with percentage display
+        # Update traces specifically for pie chart
         fig.update_traces(
             textposition='inside',
             textinfo='percent+label',
@@ -278,57 +278,48 @@ def interactive_analysis():
             margin=dict(t=100, b=50, r=200)
         )
     
-    elif selected_chart == 'Stacked Bar':
-        fig = px.bar(
-            count_data,
-            x=group_col,
-            y='Percentage',
-            color='Answer',
-            text='Percentage',
-            barmode='stack',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}...",
-            category_orders={'Answer': answer_order}
+    # Other chart types
+    elif selected_chart in ['Stacked Bar', 'Grouped Bar', 'Horizontal Bar']:
+        # Create the appropriate chart type
+        if selected_chart == 'Stacked Bar':
+            fig = px.bar(
+                count_data,
+                x=group_col,
+                y='Percentage',
+                color='Answer',
+                barmode='stack',
+                color_discrete_sequence=palette_mapping[selected_palette],
+                title=f"{selected_question[:50]}...",
+                category_orders={'Answer': answer_order}
+            )
+        elif selected_chart == 'Grouped Bar':
+            fig = px.bar(
+                count_data,
+                x=group_col,
+                y='Percentage',
+                color='Answer',
+                barmode='group',
+                color_discrete_sequence=palette_mapping[selected_palette],
+                title=f"{selected_question[:50]}...",
+                category_orders={'Answer': answer_order}
+            )
+        else:  # Horizontal Bar
+            fig = px.bar(
+                count_data,
+                y=group_col,
+                x='Percentage',
+                color='Answer',
+                orientation='h',
+                color_discrete_sequence=palette_mapping[selected_palette],
+                title=f"{selected_question[:50]}...",
+                category_orders={'Answer': answer_order}
+            )
+            
+        # Update traces specifically for bar charts
+        fig.update_traces(
+            texttemplate='%{y:.1f}%' if selected_chart == 'Horizontal Bar' else '%{text:.1f}%',
+            textposition='inside'
         )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
-    
-    elif selected_chart == 'Grouped Bar':
-        fig = px.bar(
-            count_data,
-            x=group_col,
-            y='Percentage',
-            color='Answer',
-            text='Percentage',
-            barmode='group',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}...",
-            category_orders={'Answer': answer_order}
-        )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
-    
-    elif selected_chart == 'Treemap':
-        fig = px.treemap(
-            count_data,
-            path=[group_col, 'Answer'],
-            values='Count',
-            color='Answer',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}..."
-        )
-    
-    elif selected_chart == 'Horizontal Bar':
-        fig = px.bar(
-            count_data,
-            y=group_col,
-            x='Percentage',
-            color='Answer',
-            orientation='h',
-            text='Percentage',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}...",
-            category_orders={'Answer': answer_order}
-        )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
 
     # Common layout updates (except for pie chart and sankey which have their own)
     if selected_chart not in ['Pie Chart', 'Sankey']:
