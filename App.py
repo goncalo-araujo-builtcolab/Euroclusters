@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from itertools import cycle
 
-@st.cache_data
+#@st.cache_data
 def load_and_preprocess_data():
     df = pd.read_excel('Iniciativas em Construção Sustentável e Circular (Responses).xlsx').drop(['Timestamp', 'Nome', 'Email'], axis=1)
 
