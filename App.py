@@ -303,14 +303,56 @@ def interactive_analysis():
         fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
     
     elif selected_chart == 'Treemap':
-        fig = px.treemap(
-            count_data,
-            path=[group_col, 'Answer'],
-            values='Count',
-            color='Answer',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}..."
-        )
+        try:
+            # Ensure data is properly formatted for treemap
+            if count_data.empty:
+                # Create an empty figure if no data
+                fig = go.Figure()
+                fig.update_layout(
+                    title="No data available",
+                    annotations=[{
+                        'text': 'No data available for treemap',
+                        'xref': 'paper',
+                        'yref': 'paper',
+                        'showarrow': False,
+                        'font': {'size': 20}
+                    }]
+                )
+            else:
+                # Create treemap with error handling
+                fig = px.treemap(
+                    count_data,
+                    path=[group_col, 'Answer'],
+                    values='Count',
+                    color='Answer',
+                    color_discrete_sequence=palette_mapping[selected_palette],
+                    title=f"{selected_question[:50]}..."
+                )
+                
+                # Update treemap layout
+                fig.update_traces(
+                    textinfo="label+value",
+                    hovertemplate='<b>%{label}</b><br>Count: %{value}<extra></extra>'
+                )
+                
+                fig.update_layout(
+                    margin=dict(t=50, l=25, r=25, b=25)
+                )
+        
+        except Exception as e:
+            st.error(f"Error creating treemap: {str(e)}")
+            # Create a fallback figure
+            fig = go.Figure()
+            fig.update_layout(
+                title="Error creating treemap",
+                annotations=[{
+                    'text': 'Unable to create treemap with current data',
+                    'xref': 'paper',
+                    'yref': 'paper',
+                    'showarrow': False,
+                    'font': {'size': 20}
+                }]
+            )
     
     elif selected_chart == 'Horizontal Bar':
         fig = px.bar(
