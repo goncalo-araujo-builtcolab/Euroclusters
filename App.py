@@ -241,6 +241,10 @@ def interactive_analysis():
         )
     
     elif selected_chart == 'Pie Chart':
+        # Calculate percentages for pie chart
+        total = count_data['Count'].sum()
+        count_data['Percentage'] = (count_data['Count'] / total * 100).round(1)
+        
         fig = px.pie(
             count_data,
             names='Answer',
@@ -248,17 +252,16 @@ def interactive_analysis():
             color='Answer',
             color_discrete_sequence=palette_mapping[selected_palette],
             title=f"{selected_question[:50]}...",
-            textposition='inside',
             category_orders={'Answer': answer_order}
         )
         
-        # # Update traces with correct percentage display
-        # fig.update_traces(
-        #     textposition='inside',
-        #     #textinfo='percent',
-        #     #texttemplate='%{percent}%',  # Remove .1f to show whole percentages
-        #     textfont=dict(size=12)
-        # )
+        # Update traces with percentage display
+        fig.update_traces(
+            textposition='inside',
+            textinfo='percent+label',
+            hovertemplate='%{label}<br>%{percent:.1f}%<extra></extra>',
+            textfont=dict(size=12)
+        )
         
         fig.update_layout(
             showlegend=True,
