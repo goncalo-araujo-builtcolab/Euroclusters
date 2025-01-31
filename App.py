@@ -4,7 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from itertools import cycle
 
-#@st.cache_data
+@st.cache_data
 def load_and_preprocess_data():
     df = pd.read_excel('Iniciativas em Construção Sustentável e Circular (Responses).xlsx').drop(['Timestamp', 'Nome', 'Email'], axis=1)
 
@@ -241,26 +241,25 @@ def interactive_analysis():
         )
     
     elif selected_chart == 'Pie Chart':
-        # Calculate percentages for pie chart
-        total = count_data['Count'].sum()
-        count_data['Percentage'] = (count_data['Count'] / total * 100).round(1)
+        fig = px.pie(
+            count_data,
+            names='Answer',
+            values='Count',
+            color='Answer',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
         
-        # Create the pie chart with explicit text settings
-        fig = go.Figure(data=[go.Pie(
-            labels=count_data['Answer'],
-            values=count_data['Count'],
-            text=count_data['Percentage'].apply(lambda x: f'{x:.1f}%'),  # Explicit text formatting
+        # Update traces with correct percentage display
+        fig.update_traces(
             textposition='inside',
-            hovertemplate='%{label}<br>%{percent:.1f}%<extra></extra>',
-            marker=dict(
-                colors=palette_mapping[selected_palette][:len(count_data)],
-                #line=dict(color='white', width=2)
-            ),
-            textinfo='text+label'
-        )])
+            #textinfo='percent',
+            #texttemplate='%{percent}%',  # Remove .1f to show whole percentages
+            textfont=dict(size=12)
+        )
         
         fig.update_layout(
-            title=f"{selected_question[:50]}...",
             showlegend=True,
             legend=dict(
                 orientation="v",
@@ -275,48 +274,57 @@ def interactive_analysis():
             margin=dict(t=100, b=50, r=200)
         )
     
-    # Other chart types
-    elif selected_chart in ['Stacked Bar', 'Grouped Bar', 'Horizontal Bar']:
-        # Create the appropriate chart type
-        if selected_chart == 'Stacked Bar':
-            fig = px.bar(
-                count_data,
-                x=group_col,
-                y='Percentage',
-                color='Answer',
-                barmode='stack',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}...",
-                category_orders={'Answer': answer_order}
-            )
-        elif selected_chart == 'Grouped Bar':
-            fig = px.bar(
-                count_data,
-                x=group_col,
-                y='Percentage',
-                color='Answer',
-                barmode='group',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}...",
-                category_orders={'Answer': answer_order}
-            )
-        else:  # Horizontal Bar
-            fig = px.bar(
-                count_data,
-                y=group_col,
-                x='Percentage',
-                color='Answer',
-                orientation='h',
-                color_discrete_sequence=palette_mapping[selected_palette],
-                title=f"{selected_question[:50]}...",
-                category_orders={'Answer': answer_order}
-            )
-            
-        # Update traces specifically for bar charts
-        fig.update_traces(
-            texttemplate='%{y:.1f}%' if selected_chart == 'Horizontal Bar' else '%{text:.1f}%',
-            textposition='inside'
+    elif selected_chart == 'Stacked Bar':
+        fig = px.bar(
+            count_data,
+            x=group_col,
+            y='Percentage',
+            color='Answer',
+            text='Percentage',
+            barmode='stack',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
         )
+        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+    
+    elif selected_chart == 'Grouped Bar':
+        fig = px.bar(
+            count_data,
+            x=group_col,
+            y='Percentage',
+            color='Answer',
+            text='Percentage',
+            barmode='group',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
+        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+    
+    elif selected_chart == 'Treemap':
+        fig = px.treemap(
+            count_data,
+            path=[group_col, 'Answer'],
+            values='Count',
+            color='Answer',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}..."
+        )
+    
+    elif selected_chart == 'Horizontal Bar':
+        fig = px.bar(
+            count_data,
+            y=group_col,
+            x='Percentage',
+            color='Answer',
+            orientation='h',
+            text='Percentage',
+            color_discrete_sequence=palette_mapping[selected_palette],
+            title=f"{selected_question[:50]}...",
+            category_orders={'Answer': answer_order}
+        )
+        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
 
     # Common layout updates (except for pie chart and sankey which have their own)
     if selected_chart not in ['Pie Chart', 'Sankey']:
