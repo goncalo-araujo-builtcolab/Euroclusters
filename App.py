@@ -248,16 +248,17 @@ def interactive_analysis():
             color='Answer',
             color_discrete_sequence=palette_mapping[selected_palette],
             title=f"{selected_question[:50]}...",
+            textposition='inside',
             category_orders={'Answer': answer_order}
         )
         
-        # Update traces with correct percentage display
-        fig.update_traces(
-            textposition='inside',
-            textinfo='percent',
-            #texttemplate='%{percent}%',  # Remove .1f to show whole percentages
-            textfont=dict(size=12)
-        )
+        # # Update traces with correct percentage display
+        # fig.update_traces(
+        #     textposition='inside',
+        #     #textinfo='percent',
+        #     #texttemplate='%{percent}%',  # Remove .1f to show whole percentages
+        #     textfont=dict(size=12)
+        # )
         
         fig.update_layout(
             showlegend=True,
