@@ -255,7 +255,7 @@ def interactive_analysis():
         fig.update_traces(
             textposition='inside',
             textinfo='percent',
-            texttemplate='%{percent}%',  # Remove .1f to show whole percentages
+            #texttemplate='%{percent}%',  # Remove .1f to show whole percentages
             textfont=dict(size=12)
         )
         
