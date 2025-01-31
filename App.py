@@ -250,33 +250,34 @@ def interactive_analysis():
             names='Answer',
             values='Count',
             color='Answer',
+            textposition='inside',
             color_discrete_sequence=palette_mapping[selected_palette],
             title=f"{selected_question[:50]}...",
             category_orders={'Answer': answer_order}
         )
         
-        # Update traces with percentage display
-        fig.update_traces(
-            textposition='inside',
-            textinfo='percent+label',
-            hovertemplate='%{label}<br>%{percent:.1f}%<extra></extra>',
-            textfont=dict(size=12)
-        )
+        # # Update traces with percentage display
+        # fig.update_traces(
+        #     textposition='inside',
+        #     textinfo='percent+label',
+        #     hovertemplate='%{label}<br>%{percent:.1f}%<extra></extra>',
+        #     textfont=dict(size=12)
+        # )
         
-        fig.update_layout(
-            showlegend=True,
-            legend=dict(
-                orientation="v",
-                yanchor="middle",
-                y=0.5,
-                xanchor="left",
-                x=1.2,
-                font=dict(size=10)
-            ),
-            height=700,
-            width=900,
-            margin=dict(t=100, b=50, r=200)
-        )
+        # fig.update_layout(
+        #     showlegend=True,
+        #     legend=dict(
+        #         orientation="v",
+        #         yanchor="middle",
+        #         y=0.5,
+        #         xanchor="left",
+        #         x=1.2,
+        #         font=dict(size=10)
+        #     ),
+        #     height=700,
+        #     width=900,
+        #     margin=dict(t=100, b=50, r=200)
+        # )
     
     elif selected_chart == 'Stacked Bar':
         fig = px.bar(
