@@ -76,16 +76,26 @@ def load_and_preprocess_data():
 
 def display_group_table(data, group_col):
     """Display summary table for the selected grouping"""
-    # Ensure we're not duplicating the group column in the index
-    summary = (data.groupby(group_col, observed=True)
+    # Create a temporary column name that won't conflict with existing columns
+    temp_col = f'temp_{group_col}_grouping'
+    
+    # Make a copy of the data to avoid modifying the original
+    temp_data = data.copy()
+    temp_data[temp_col] = temp_data[group_col]
+    
+    # Use the temporary column for grouping
+    summary = (temp_data.groupby(temp_col, observed=True)
                .agg({
                    'Answer': 'count',
                    'Entity': 'nunique'
                })
-               .reset_index())
+               .reset_index()
+               .rename(columns={
+                   temp_col: group_col,
+                   'Answer': 'Total Responses',
+                   'Entity': 'Unique Entities'
+               }))
     
-    # Rename columns after reset_index to avoid duplicates
-    summary.columns = [f'{group_col}', 'Total Responses', 'Unique Entities']
     return summary
 
 def interactive_analysis():
