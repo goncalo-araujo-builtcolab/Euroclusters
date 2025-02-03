@@ -1,11 +1,18 @@
+# Page Configuration
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from itertools import cycle
+from plotly.subplots import make_subplots
+
+# Set page config to wide layout
+st.set_page_config(layout="wide")
 
 @st.cache_data
 def load_and_preprocess_data():
+    """Load and preprocess the survey data."""
+    # Read the Excel file and drop unnecessary columns
     df = pd.read_excel('Iniciativas em Construção Sustentável e Circular (Responses).xlsx').drop(['Timestamp', 'Nome', 'Email'], axis=1)
 
     # Store original column names
@@ -13,6 +20,7 @@ def load_and_preprocess_data():
     stakeholder_col = 'Grupo de stakeholders que pertencem à organização (pode ser selecionada mais do que uma)'
     location_col = 'Localização NUT III (pode ser selecionada mais do que uma)'
 
+    # Define multi-answer columns
     multi_answer_cols = [
         'Se tivesse 60 000€ para o desenvolvimento de um novo serviço ou produto relacionado com a reutilização de materiais (excluindo investimentos), como usaria este valor? (Escolha até 3 opções)',
         'Que barreiras existentes identifica na implementação e no desenvolvimento de um novo produto ou serviço para a reutilização de materiais?  (Escolha até 3 opções)',
@@ -24,19 +32,55 @@ def load_and_preprocess_data():
         'Que indicadores de sustentabilidade poderiam apoiar a sua atividade? (É possível selecionar mais do que uma opção).',
     ]
 
-    # Clean and split responses into lists for all relevant columns
+    def clean_and_split_answers(text, is_multiple=False):
+        """
+        Clean and split answers while preserving commas within parentheses.
+        Parameters:
+            text (str): The text to clean and split
+            is_multiple (bool): Whether this is a multiple-choice field (like stakeholders/locations)
+        Returns:
+            list: List of cleaned answers
+        """
+        if pd.isna(text) or text == '':
+            return []
+        
+        # Split by the primary delimiter first ('., ')
+        answers = text.split('., ')
+        
+        # Clean each answer
+        cleaned_answers = []
+        for answer in answers:
+            # Remove trailing periods and commas
+            answer = answer.strip(' .,')
+            if answer:
+                if is_multiple:
+                    # For multiple-choice fields, split by comma and clean each one
+                    items = [s.strip() for s in answer.split(', ')]
+                    cleaned_answers.extend(items)
+                else:
+                    cleaned_answers.append(answer)
+        
+        # Remove duplicates while preserving order for multiple-choice fields
+        if is_multiple:
+            seen = set()
+            cleaned_answers = [x for x in cleaned_answers if not (x in seen or seen.add(x))]
+        
+        return cleaned_answers
+
+    # Clean and split responses for all relevant columns
     cols_to_split = [location_col, stakeholder_col] + multi_answer_cols
     for col in cols_to_split:
-        df[col] = df[col].fillna('').str.split(', ')
+        # Pass is_multiple flag for both stakeholder and location columns
+        is_multiple = col in [stakeholder_col, location_col]
+        df[col] = df[col].apply(lambda x: clean_and_split_answers(x, is_multiple=is_multiple))
 
+    # Process each question into a tidy format
     tidy_dfs = []
-    
-    # Process each question column
     for col in multi_answer_cols:
         # Create temporary dataframe with relevant columns
         temp_df = df[[entity_col, stakeholder_col, col]].copy()
         
-        # Explode both stakeholders and the current question's answers
+        # Explode both stakeholders and answers
         temp_df = temp_df.explode(stakeholder_col)
         temp_df = temp_df.explode(col)
         
@@ -46,11 +90,13 @@ def load_and_preprocess_data():
             stakeholder_col: 'Stakeholder',
             entity_col: 'Entity'
         })
+        
+        # Add question column
         temp_df['Question'] = col
         
         tidy_dfs.append(temp_df)
 
-    # Combine all DataFrames
+    # Combine all processed dataframes
     tidy_df = pd.concat(tidy_dfs, ignore_index=True)
 
     # Clean whitespace and drop empty rows
@@ -98,6 +144,44 @@ def display_group_table(data, group_col):
     
     return summary
 
+def truncate_text(text, max_length=40):
+    """Helper function to truncate text for legend entries"""
+    if len(text) <= max_length:
+        return text
+    return text[:max_length] + '...'
+
+def update_legend_text(fig, max_length=40):
+    """Update legend text for all traces in a figure"""
+    for trace in fig.data:
+        if hasattr(trace, 'name'):
+            trace.name = truncate_text(trace.name, max_length)
+
+def create_chart_layout(chart_type, count_data, group_col):
+    """Create consistent layout settings for charts"""
+    # Calculate dynamic height based on data
+    num_categories = len(count_data[group_col].unique())
+    base_height = 500  # minimum height
+    height_per_category = 40  # height per category
+    
+    if chart_type == 'Horizontal Bar':
+        chart_height = max(base_height, num_categories * height_per_category)
+    else:
+        chart_height = base_height
+    
+    return dict(
+        height=chart_height,
+        margin=dict(r=150, t=50, b=50, l=50),  # Reduced right margin for legend
+        legend=dict(
+            yanchor="top",
+            y=0.99,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=8),  # Smaller font size for legend
+            tracegroupgap=5  # Reduce gap between legend items
+        ),
+        font=dict(size=12)  # Main font size
+    )
+
 def interactive_analysis():
     st.title("Interactive Circular Economy Initiatives Analysis")
     
@@ -113,8 +197,9 @@ def interactive_analysis():
     group_options = ['Location', 'Entity', 'Stakeholder', 'Total']
     selected_group = st.sidebar.selectbox("Group By", group_options)
     
-    chart_types = ['Stacked Bar', 'Grouped Bar', 'Pie Chart', 'Treemap', 'Horizontal Bar', 'Sankey']
+    chart_types = ['Stacked Bar', 'Treemap', 'Horizontal Bar', 'Sankey', 'Interactive Pie']  # Added Faceted Pie option
     selected_chart = st.sidebar.selectbox("Chart Type", chart_types)
+    
     
     palettes = ['Viridis', 'Plasma', 'Portland']
     selected_palette = st.sidebar.selectbox("Color Palette", palettes)
@@ -131,7 +216,6 @@ def interactive_analysis():
     if selected_group == 'Stakeholder':
         group_col = 'Stakeholder'
     elif selected_group == 'Location':
-        # Merge with location data for this case
         question_df = pd.merge(
             question_df,
             location_df[['Entity', 'Location']].drop_duplicates(),
@@ -189,64 +273,95 @@ def interactive_analysis():
         
         # Create links
         source = [node_indices[row[group_col]] for _, row in count_data.iterrows()]
-        target = [node_indices[row['Answer']] + len(group_labels) for _, row in count_data.iterrows()]
+        target = [node_indices[row['Answer']] for _, row in count_data.iterrows()]  # Removed the + len(group_labels)
         value = count_data['Count'].tolist()
+        
+        # Generate enough colors for all nodes
+        base_colors = palette_mapping[selected_palette]
+        num_colors_needed = len(all_nodes)
+        
+        # Create a color sequence by repeating and interpolating if necessary
+        if len(base_colors) < num_colors_needed:
+            repeat_times = (num_colors_needed // len(base_colors)) + 1
+            extended_colors = base_colors * repeat_times
+            node_colors = extended_colors[:num_colors_needed]
+        else:
+            node_colors = base_colors[:num_colors_needed]
         
         # Create Sankey diagram
         fig = go.Figure(data=[go.Sankey(
             node=dict(
                 pad=15,
                 thickness=20,
-                line=dict(color="black", width=0.5),
-                label=all_nodes,
-                color=palette_mapping[selected_palette][:len(all_nodes)]
+                line=dict(color="lightgray", width=0.5),
+                label=[truncate_text(node) for node in all_nodes],
+                color=node_colors,  # This should now apply to all nodes
             ),
             link=dict(
                 source=source,
                 target=target,
-                value=value
+                value=value,
+                color=[f"rgba({int(int(node_colors[s][1:3], 16))}, {int(int(node_colors[s][3:5], 16))}, {int(int(node_colors[s][5:7], 16))}, 0.4)" for s in source]
             )
         )])
-        
-        fig.update_layout(
-            title=f"{selected_question[:50]}...",
-            height=800,
-            margin=dict(t=100, r=200)
-        )
-    
-    elif selected_chart == 'Pie Chart':
-        fig = px.pie(
-            count_data,
-            names='Answer',
-            values='Count',
-            color='Answer',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}...",
-            category_orders={'Answer': answer_order}
+
+    elif selected_chart == 'Interactive Pie':
+        # Add dropdown for specific group selection
+        groups = sorted(count_data[group_col].unique())
+        selected_group_value = st.selectbox(
+            f"Select {selected_group}",
+            groups,
+            key='pie_group_selector'
         )
         
-        # Update traces with correct percentage display
-        fig.update_traces(
+        # Filter data for selected group
+        group_data = count_data[count_data[group_col] == selected_group_value]
+        
+        # Create color mapping for consistency
+        answer_color_map = {
+            answer: color
+            for answer, color in zip(
+                answer_order,
+                palette_mapping[selected_palette][:len(answer_order)]
+            )
+        }
+        
+        # Ensure consistent order and colors
+        ordered_data = pd.DataFrame({'Answer': answer_order}).merge(
+            group_data,
+            on='Answer',
+            how='left'
+        ).fillna(0)
+        
+        # Get colors in the same order as the data
+        colors = [answer_color_map[ans] for ans in ordered_data['Answer']]
+        
+        # Create single pie chart
+        fig = go.Figure(data=[go.Pie(
+            labels=ordered_data['Answer'],
+            values=ordered_data['Count'],
+            marker_colors=colors,
             textposition='inside',
             textinfo='percent',
-            texttemplate='%{percent}%',  # Remove .1f to show whole percentages
-            textfont=dict(size=12)
-        )
+            #texttemplate='%{percent*100:.1f}%',
+            hovertemplate="%{label}<br>%{value} responses<br>%{percent*100:.1f}%<extra></extra>"
+        )])
         
+        # Update layout
         fig.update_layout(
+            height=600,
+            title_text=f"{selected_question[:50]}...<br><sub>{selected_group}: {selected_group_value}</sub>",
             showlegend=True,
             legend=dict(
-                orientation="v",
-                yanchor="middle",
-                y=0.5,
+                yanchor="top",
+                y=0.99,
                 xanchor="left",
-                x=1.2,
-                font=dict(size=10)
-            ),
-            height=700,
-            width=900,
-            margin=dict(t=100, b=50, r=200)
+                x=1.02,
+                font=dict(size=8)
+            )
         )
+        
+        st.plotly_chart(fig, use_container_width=True)
     
     elif selected_chart == 'Stacked Bar':
         fig = px.bar(
@@ -260,21 +375,14 @@ def interactive_analysis():
             title=f"{selected_question[:50]}...",
             category_orders={'Answer': answer_order}
         )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
-    
-    elif selected_chart == 'Grouped Bar':
-        fig = px.bar(
-            count_data,
-            x=group_col,
-            y='Percentage',
-            color='Answer',
-            text='Percentage',
-            barmode='group',
-            color_discrete_sequence=palette_mapping[selected_palette],
-            title=f"{selected_question[:50]}...",
-            category_orders={'Answer': answer_order}
+        fig.update_traces(
+            texttemplate='%{text:.1f}%', 
+            textposition='inside',
+            width=0.8
         )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
+        update_legend_text(fig)
+        fig.update_layout(**create_chart_layout(selected_chart, count_data, group_col))
+    
     
     elif selected_chart == 'Treemap':
         fig = px.treemap(
@@ -285,6 +393,10 @@ def interactive_analysis():
             color_discrete_sequence=palette_mapping[selected_palette],
             title=f"{selected_question[:50]}..."
         )
+        
+        layout = create_chart_layout(selected_chart, count_data, group_col)
+        layout.update(height=700)  # Specific height for treemap
+        fig.update_layout(**layout)
     
     elif selected_chart == 'Horizontal Bar':
         fig = px.bar(
@@ -298,18 +410,13 @@ def interactive_analysis():
             title=f"{selected_question[:50]}...",
             category_orders={'Answer': answer_order}
         )
-        fig.update_traces(texttemplate='%{text:.1f}%', textposition='inside')
-
-    # Common layout updates (except for pie chart and sankey which have their own)
-    if selected_chart not in ['Pie Chart', 'Sankey']:
-        fig.update_layout(
-            height=600,
-            xaxis_title=selected_group if selected_chart != 'Horizontal Bar' else 'Percentage (%)',
-            yaxis_title='Percentage (%)' if selected_chart != 'Horizontal Bar' else selected_group,
-            legend_title='Answers',
-            hovermode='closest',
-            font=dict(size=12)
+        fig.update_traces(
+            texttemplate='%{text:.1f}%', 
+            textposition='inside',
+            width=0.8
         )
+        update_legend_text(fig)
+        fig.update_layout(**create_chart_layout(selected_chart, count_data, group_col))
     
     st.plotly_chart(fig, use_container_width=True)
 
