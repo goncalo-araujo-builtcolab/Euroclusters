@@ -259,6 +259,7 @@ def interactive_analysis():
         'Plasma': px.colors.sequential.Plasma,
         'Portland': px.colors.sequential.Plotly3
     }
+
     
     st.header("Interactive Visualization")
     
@@ -304,6 +305,7 @@ def interactive_analysis():
                 color=[f"rgba({int(int(node_colors[s][1:3], 16))}, {int(int(node_colors[s][3:5], 16))}, {int(int(node_colors[s][5:7], 16))}, 0.4)" for s in source]
             )
         )])
+        st.plotly_chart(fig, use_container_width=True, key=f"sankey_{selected_group}")
 
     elif selected_chart == 'Interactive Pie':
         # Add dropdown for specific group selection
@@ -343,7 +345,6 @@ def interactive_analysis():
             marker_colors=colors,
             textposition='inside',
             textinfo='percent',
-            #texttemplate='%{percent*100:.1f}%',
             hovertemplate="%{label}<br>%{value} responses<br>%{percent*100:.1f}%<extra></extra>"
         )])
         
@@ -361,7 +362,7 @@ def interactive_analysis():
             )
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"pie_{selected_group}_{selected_group_value}")
     
     elif selected_chart == 'Stacked Bar':
         fig = px.bar(
@@ -382,7 +383,7 @@ def interactive_analysis():
         )
         update_legend_text(fig)
         fig.update_layout(**create_chart_layout(selected_chart, count_data, group_col))
-    
+        st.plotly_chart(fig, use_container_width=True, key=f"stacked_bar_{selected_group}")
     
     elif selected_chart == 'Treemap':
         fig = px.treemap(
@@ -397,6 +398,7 @@ def interactive_analysis():
         layout = create_chart_layout(selected_chart, count_data, group_col)
         layout.update(height=700)  # Specific height for treemap
         fig.update_layout(**layout)
+        st.plotly_chart(fig, use_container_width=True, key=f"treemap_{selected_group}")
     
     elif selected_chart == 'Horizontal Bar':
         fig = px.bar(
@@ -417,13 +419,12 @@ def interactive_analysis():
         )
         update_legend_text(fig)
         fig.update_layout(**create_chart_layout(selected_chart, count_data, group_col))
-    
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"horizontal_bar_{selected_group}")
 
     # Raw Data Display
-    if st.checkbox("Show Raw Data"):
+    if st.checkbox("Show Raw Data", key="raw_data_checkbox"):
         st.subheader("Processed Data")
-        st.dataframe(count_data)
+        st.dataframe(count_data, key="raw_data_table")
 
 if __name__ == "__main__":
     interactive_analysis()
