@@ -13,7 +13,7 @@ st.set_page_config(layout="wide")
 def load_and_preprocess_data():
     """Load and preprocess the survey data."""
     # Read the Excel file and drop unnecessary columns
-    df = pd.read_excel('Iniciativas em Construção Sustentável e Circular (Responses).xlsx').drop(['Timestamp', 'Nome', 'Email'], axis=1)
+    df = pd.read_excel('Iniciativas em Construção Sustentável e Circular (Responses).xlsx')
 
     # Store original column names
     entity_col = 'Nome da Entidade'
